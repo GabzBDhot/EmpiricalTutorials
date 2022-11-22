@@ -1,0 +1,97 @@
+---
+title: "DataTable Basics Part 2"
+author: "Gabriel Domingo"
+date: "July 2020"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Data Table Introduction
+
+This document continues the introduction to Data.table from Part 1. Lets re-read the dataset.
+
+
+```{r message=FALSE, include=FALSE}
+require(tidyverse)
+require(data.table)
+
+dt1<-read_csv("flights14.csv")
+head(dt1)
+dt2<-fread("flights14.csv")
+head(dt2)
+```
+
+
+
+## Task 1: Renaming Column Names
+
+Another typical task is simply to rename columns. In tidyverse:
+
+```{r}
+dt1 %>% rename("departure delay"=dep_delay)
+```
+In data.table, we have `setnames`:
+
+```{r}
+setnames(dt2,'dep_delay','departure delay')
+dt2 #permanently changing the name
+```
+
+
+
+## Task 2: Aggregations (Simple or by Group)
+
+A typical task is to aggregate on a column. If that column is numeric, then aggregation would be getting a mean or other variable. If that column is discrete, we could get the counts per value.
+
+Here are the codes for tidy:
+
+```{r}
+dt1 %>% group_by(origin) %>% summarise(count=n())
+dt1 %>% group_by(origin) %>% summarise(count=n())
+```
+
+For continuous variables, we can calculate means per group. 
+
+```{r}
+dt1 %>% group_by(origin) %>% summarise(mean_dep_arr_delay=mean(arr_delay))
+
+```
+
+In data.table, this is also quite easy. This time we use the third part, the `by` part.
+
+```{r}
+dt2[,.(count=.N),by=.(origin)]
+```
+
+```{r}
+dt2[,.(mean_dep_arr_delay=mean(arr_delay)),by=.(origin)]
+dt2[,.(mean_dep_arr_delay=mean(arr_delay)),by="origin"] #equivalent
+
+```
+
+Notice the structure compared to $ \text{dt[i,j,by] }$. The `by` gives us the list of variables to calculate the aggregations. 
+
+
+## Task 3: Creating New Variables as Functions of Another (1)
+
+Another common task is to create a column, likely as a function of other variables. 
+
+In tidy, this is the following:
+
+```{r}
+dt1 %>% group_by(origin) %>% mutate(mean_arr_delay=mean(arr_delay)) %>% select(mean_arr_delay)
+```
+
+For data.table, we use the `:=` operator:
+
+```{r}
+dt2[,mean_arr_delay:=mean(arr_delay),by=origin]
+dt2[,c("origin","mean_arr_delay")] 
+```
+
+For both methods, what happened was a new variable was created, per value of origin. In this case, there are 3 unique values of origin, and these repeat throughout the dataset.

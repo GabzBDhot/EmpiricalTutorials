@@ -1,0 +1,124 @@
+---
+title: 'GGplot2 Tutorial: How to plot Maps'
+author: "Gabriel Domingo"
+date: "December 2018 (Update May 2022)"
+output:
+  pdf_document: default
+  html_notebook: default
+subtitle: "Part 2, Using Shapefiles"
+---
+
+We now continue our exploration using actual shapefiles. In this one, we can see the connection between the sf object and dataframes, and we can draw maps using ggplot.
+
+We can then explore the concept of distance in these maps, as you will see. Lets use the north carolina shapefile, which comes with sf.
+
+```{r}
+library(sf)
+library(tidyverse)
+```
+
+
+
+```{r}
+nc <- st_read(system.file("shape/nc.shp", package="sf"), quiet = TRUE)  ## this is a shapefile
+                                                                        ## we can get from packages, or 
+                                                                        ## free sources online.
+
+
+nc
+```
+
+We notice that the nc has a "Multipolygon" geometry column, but it otherwise is a simple dataframe that ggplot can understand.
+
+
+```{r}
+ggplot(nc) +
+  geom_sf(aes(fill = AREA)) + # we can assign values to each Multipolygon, that is part of the nc sf
+                              # datatype
+  ggtitle("Area of counties in North Carolina") +
+  theme_bw()
+```
+We can subset this, ala data.frames:
+
+```{r}
+ggplot(filter(nc,NAME=="Northampton")) +
+  geom_sf(aes(fill = AREA))
+```
+
+Now, lets think about coordinate reference system. 
+
+```{r}
+st_crs(nc) #NAD27 is espg 4267
+```
+
+The nc data already has a CRS. This can help us calculate distances.
+
+```{r}
+centers<-st_centroid(filter(nc,NAME %in% c("Northampton","Alleghany"))) #just to get 2 counties
+
+line<-st_coordinates(centers) %>% #extracts the long-lat
+  st_linestring() %>% # turns long-lat into a line
+  st_sfc(crs=4267) # turning it into a sf object,with a CRS
+
+
+ggplot(nc)+geom_sf()+geom_sf(data=centers,color="red")+geom_sf(data=line,color="red")
+  
+```
+
+We can get the distance between the 2 counties:
+
+```{r}
+st_distance(centers)
+```
+
+The units are also present, its in meters. The CRS is what allows measurement. They key is that all the sf object being drawn should be of the same CRS. This time lets draw a 10 km circle around Richmond.
+
+```{r}
+rich<-st_centroid(filter(nc,NAME %in% c("Richmond")))
+rich_circ<-st_buffer(rich,dist=10000) #this is 10km radius
+ggplot(nc)+geom_sf()+
+  geom_sf(data=rich_circ,color="red")+
+  geom_sf(data=rich,color="red",size=.5)
+```
+
+```{r}
+(st_area(rich_circ)/(pi))^.5 #confirming that the radius is 10km
+```
+
+
+### Philippines -- Provinces
+
+
+Lets use an example from the Philippines; I have the provincial shapefiles for the Philippines[^2]
+
+[^2]: Email me for the shapefiles.
+
+```{r}
+phils<-st_read("Provinces_mapshaper/PHL_adm2_PSA_pn_2016June.shp")
+head(phils)
+ggplot(phils)+geom_sf(aes(fill=Shape_Area),lwd=0)+theme_bw()
+
+```
+
+Now, if we wanted to plot markets with certain values (i.e prices at a Regional Level), we would have to merge it with the plot above, using the usual techniques. Lets say i have the following database i wanted to plot the column Data, to know if i have the data for a particular province.
+
+```{r}
+concord<-readxl::read_excel("Province_Region_Concordance.xlsx")
+head(concord)
+```
+
+```{r}
+phils<-merge(phils,concord,by.x="Pro_Name",by.y="province")
+#at this point you check if it merged correctly
+```
+
+
+
+```{r}
+ggplot(phils)+geom_sf(aes(fill=Data),lwd=0)+theme_minimal()+ggtitle("Some Map i did")
+
+```
+
+We can plot variables quite easily. Note that we can get municipal shapefiles for the Philippines also. 
+
+As HW, please select any two provinces and find the distance and draw it. What is its CRS?

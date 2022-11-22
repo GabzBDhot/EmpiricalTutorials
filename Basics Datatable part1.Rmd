@@ -1,0 +1,168 @@
+---
+title: "DataTable Basics Part 1"
+author: "Gabriel Domingo"
+date: "June 2020 (current version: April 2022)"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Data Table Introduction
+
+This document explains how to do basics of data.table package.^[Current version 2: April 2022] Its an alternate way of doing the `tidyverse` way of data manipulation. In this tutorial, i will explain three tasks one usually does in tidyverse and give you the data.table equivalent.
+
+But first, why do `data.table`? The best reason is performance. Please see this github page for performance benchmarks. The answer is that data.table is faster. As a user now for the past 2 years, i can attest to this.
+
+https://github.com/Rdatatable/data.table/wiki/Benchmarks-:-Grouping
+
+
+## Task 1: Reading Tables
+
+Tidyverse has `readr` which allows one to import csvs. Data.table has that too; with fread.
+
+```{r message=FALSE}
+require(tidyverse)
+require(data.table)
+
+dt1<-read_csv("flights14.csv")
+head(dt1)
+```
+
+```{r}
+dt2<-fread("flights14.csv")
+head(dt2)
+
+```
+
+
+Importing data this way ensures that the objects are a tibble for tidyverse, and data.table for Data.table. If you had a standard data.frame, you can convert to a tibble with `tibble()` and to data.table with `data.table()`. The type of data is also shown in Rmarkdown, but not in the pdf output. ^[Btw, i fully recommend using and learning Rmarkdown for reports generation.] Each importing command tries to import each column as the appropriate data type, although, the command enables the analyst to specify types if needed.
+
+## Task 2: Filtering Rows
+
+If we use tidy, we would use piping, and read from left to right. Use the `filter()` verb to enter a logical condition. You can enter multiple conditions the logical "and" `&`, or `|`, not `!`. For numerical, we can do `>`,`<` also. 
+
+As an update, `R` has a native pipe in `|>` as a replacement/subst for the magrittr's `%>%`.
+
+```{r}
+dt1 %>% filter(origin=="JFK") 
+dt1 %>% filter(origin!="JFK") 
+dt1 %>% filter(origin!="JFK" & dep_delay>20)
+```
+
+```{r}
+#using the native pipe, |>
+
+dt1 |> filter(origin=="JFK") 
+
+```
+
+We can use data.table also. There is neat way to understand basic structure of a `data.table`. The verbs are directly used in this form:
+
+$$ \text{dt[i,j,by] }$$
+The `i` talks about rows, so generally operations on rows goes directly into this first position.
+
+The `j` talks about columns, and `by` includes group-row operations.
+
+Implementing the same notion for Data.table, we would put the filter directly:
+
+```{r}
+dt2[origin=="JFK",]
+dt2[origin!="JFK" & dep_delay>20,]
+```
+
+### Task 3 : Selecting Columns
+
+In Tidy, selecting columns/keeping columns uses the tidy verb `select`. Tidy usually requires verbs, and knowing the correct verbs. Meanwhile, data.table has fewer verbs, especially for these basic operations.
+
+```{r}
+dt1 %>% select(c("year","month","day"))
+```
+For data.table, we use the `j`, or the second component, making sure to add a "," at the start.
+
+```{r}
+dt2[,c("year","month","day")]
+```
+
+If you know base R, you would find this quite familiar. Here is another way to do it when you are doing it interactively. The `.()` format is a request for a list (this is a data.table thing, not important).
+
+```{r}
+dt2[,.(year,month,day)]
+```
+
+
+### Task 3 bonus -- selecting by Regular expression
+
+We can select by in tidy using the `tidy select` verbs [Can you already see the problem with tidy] `contains` is a wrapper for other regex verbs in R.^[If you need more information on regex, we can do something separate. Regex can be quite useful.] 
+
+```{r}
+dt1 %>% select(contains("delay"),c("month","year","day"))
+```
+
+In data.table, we can also use functions to select columns.
+
+```{r}
+dt2[, .SD, .SDcols = patterns("delay|month|year|day",cols=names(dt2))]
+dt2[, .SD, .SDcols = grep("delay|month|year|day",names(dt2),value=TRUE)]
+```
+This introduces the notion of `.SDcols` and `.SD`. SDCols allows the analyst to specify which columns she wants to work with. In fact, you can feed SDcols a character vector, or a regex command. 
+
+To show the flexibility of data.table, i use two regex commands; the old staple `grep`, and the data.table convenience function `patterns`).
+
+In the `j` part, you use the variable name `.SD` to tell data.table to use the results from `.SDcols`.
+
+### Necessary Information on Datatypes and Creating a new Column
+
+I might as well note here the datatypes one typically encounters. First is numeric (or integer) vector:
+
+```{r}
+str(dt1$dep_delay)
+str(dt2$dep_delay)
+# the $ symbol takes the data.table/tibble column and turns it into a vector
+```
+
+Next is Character vector. We can use regex (as above), or simply equality (also see above for filtering), to select characters.
+
+```{r}
+str(dt1$dest)
+```
+
+Next is factor. Think of a factor as ordered text. This is also important for regression later on, as a dummy variable.
+
+```{r}
+#get unique carriers:
+unique(dt2$carrier)
+#turn it into a factor
+
+unique(dt2$carrier) |> factor()
+
+```
+
+In the above example, the carrier codes are ordered alphabetically. So, in a ggplot, they will also be ordered this way, and in a regression "AA" is the base case.
+
+Finally, we have dates. This is actually fairly involved, but mostly we will be using daily dates for our work. There are several formats possible, but the most convenient one may be `date` command. We can manipulate dates as if they are numbers (find the diff), and when plotting, ggplot can order dates automatically.
+
+We will have to construct dates as follows:
+
+```{r}
+as.Date("2020-01-01") #the format is year-month-day
+```
+
+Using the flights data, we can construct a new column which is a date column. As a bonus, we have demonstrated here the 2 ways in data.table and tidyverse to create a new column. We construct a date by pasting together the year, month and day information in the format date prefers.^[We can change the default format.]
+
+```{r}
+#using data.table to construct a new column:
+
+dt2[,date:=as.Date(paste(year,month,day,sep="-"))]
+dt2$date |> str()
+
+# using the tidyverse way
+
+dt1<-dt1 %>% mutate(date=as.Date(paste(year,month,day,sep="-")))
+#in tidyverse, you need to overwrite the old dt1
+dt1$date %>% str()
+```
+

@@ -1,0 +1,202 @@
+---
+title: 'SF Tutorial: How to plot Maps'
+author: "Gabriel Domingo"
+date: "December 2018 (Update May 2022)"
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+# Introduction
+
+We frequently have to plot locations on maps. There has been some changes in this front, which make plotting much more convienient. The current "state of the art" is to use the newer package "sf". "Sf" has better integration with the tidyverse, as should be evident here.^[This comes from the vignettes that come from `sf`. Meanwhile there is a book for these concepts here: https://geocompr.robinlovelace.net/preface.html.] 
+
+```{r message=FALSE, warning=FALSE}
+library(sf)
+library(tidyverse)
+```
+
+Lets run a few examples from an online tutorial, and then work on the Philippines Map.
+
+
+```{r}
+nc <- st_read(system.file("shape/nc.shp", package="sf"), 
+              quiet = TRUE)  ## this is a shapefile
+                            ## we can get from packages, or 
+                         ## free sources online.
+
+# limit to first 2 counties
+nc <- nc[1:2,]
+
+nc
+```
+
+We notice that the nc has a "Multipolygon" geometry column, but it otherwise is a simple dataframe that ggplot can understand. What is most interesting here is the geometry column, and it says here that this is a multipolygon. Indeed, dplyr/tidyverse works well with an sf object:
+
+```{r}
+nc %>% filter(NAME=="Alleghany") #works
+```
+
+
+```{r message=FALSE, warning=FALSE}
+require(data.table)
+
+nc.datable<-data.table(nc)
+nc.datable
+#it becomes a datatable, and no longer an sf
+```
+Because data.table turns it into data.table (from sf), the sf commands we will use below won't work. So, if you wanted to manipulate a large dataframe, you can do that in data.table, but you will need to convert it back to sf.
+
+```{r error=TRUE}
+require(ggplot2)
+ggplot(nc.datable)+geom_sf()
+```
+```{r}
+#converting it back to sf
+st_sf(nc.datable) #converted
+```
+
+ 
+### Exploring geometry
+
+First thing we should note is that `geometry` column is a list-column, which means each row consists of multiple items in a list. I will re-release list column tutorials in the near future, but it sufficies to say that each row of a list column contains a list, posibly a list of lists.
+
+
+```{r}
+nc$geometry[1][[1]] # this is the column, which contains many items. 
+```
+
+```{r}
+
+nc$geometry[1][[1]][[1]][[1]] 
+#The first element on the list
+str(nc$geometry[1][[1]][1][1] )
+```
+
+
+This is a matrix, which works similarly to a dataframe/tibble/data.table. Each row contains points, positions, which will be combined together in the map.
+
+We can extract the geometry component of `nc`:
+
+```{r}
+st_geometry(nc)
+```
+
+### Other types of Geometries
+
+```{r, fig.align='center'}
+p <- rbind(c(3.2,4), c(3,4.6), c(3.8,4.4), c(3.5,3.8), c(3.4,3.6), c(3.9,4.5))
+(mp <- st_multipoint(p))
+
+ggplot(mp)+geom_sf()
+
+```
+
+```{r,fig.align='center'}
+s1 <- rbind(c(0,3),c(0,4),c(1,5),c(0,5))
+(ls <- st_linestring(s1))
+ggplot(ls)+geom_sf()
+
+```
+
+
+```{r,fig.align='center'}
+p1 <- rbind(c(0,0), c(1,0), c(3,2), c(2,4), c(1,4), c(0,0))
+pol <-st_polygon(list(p1))
+ggplot(pol)+geom_sf(fill="green")
+```
+
+The above is a polygon, and note that it "returns" to point (0,0). If it doesnt, then polygon will issue a warning:
+
+```{r, error=TRUE,fig.align='center'}
+p1 <- rbind(c(0,0), c(1,0), c(3,2), c(2,4), c(1,4), c(0,1))
+pol <-st_polygon(list(p1))
+
+```
+
+
+
+### Commands related to geometries
+
+`st_distance` gets the distance between geometries
+
+```{r}
+st_distance(st_point(c(0,0)),st_point(c(1,1))) 
+sqrt(2) #hypotenuse
+```
+
+`st_intersection` and `st_difference` gives you the intersection and difference
+
+```{r,fig.align='center'}
+set.seed(131)
+
+m = rbind(c(0,0), c(1,0), c(1,1), c(0,1), c(0,0))
+p = st_polygon(list(m))
+n = 2
+l = vector("list", n)
+for (i in 1:n) {
+  l[[i]] = p + 1 * runif(2)
+}
+
+
+ggplot()+geom_sf(data=l[[1]])+
+  geom_sf(data=l[[2]])
+
+```
+
+In the code, we have that 2 rectanges with an intersection.
+
+```{r,fig.align='center'}
+d = st_difference(l[[1]],l[[2]]) 
+plot(d, col = sf.colors(categorical = TRUE, alpha = .5))
+
+
+
+
+```
+Notice that difference depends on which is on top of which.
+
+```{r, fig.align='center'}
+d = st_difference(l[[2]],l[[1]]) 
+plot(d, col = sf.colors(categorical = TRUE, alpha = .5))
+
+```
+
+Another thing we can do is to get the intersection.
+
+
+```{r,fig.align='center'}
+int=st_intersection(l[[1]],l[[2]]) 
+
+ggplot()+geom_sf(data=l[[1]])+
+  geom_sf(data=l[[2]])+geom_sf(data=int,fill="green")
+
+```
+
+
+```{r, fig.align='center'}
+uni=st_union(l[[1]],l[[2]])
+plot(uni)
+
+```
+
+
+Note that i'm interchanging "plot" which is a command from `sf` and `geom_sf`. For your own understanding, please make sure you can do either.
+
+Some return new geometries:
+
+```{r, fig.align='center'}
+st_centroid(uni)
+plot(st_centroid(uni))
+plot(uni)
+plot(st_centroid(uni),add=TRUE)
+```
+
+Another example is "buffer":
+
+```{r, fig.align='center'}
+uni.buf<-st_buffer(uni,dist=.1)
+ggplot()+geom_sf(data=uni)+geom_sf(data=uni.buf,fill=NA)
+
+```
+

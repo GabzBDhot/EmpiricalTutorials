@@ -1,0 +1,131 @@
+---
+title: "DataTable Basics Part 3"
+author: "Gabriel Domingo"
+date: "September 2020"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Data Table Part 3!
+
+At this point, lets do a recap. First, we know that the logic of data.table can be summed as:
+
+$$ \text{DT[i,j,by] }$$
+
+
+### Reminder: use of i in Datatable
+ 
+  + subset,filter rows: DT[colA>value]
+  + sort using `order()` -- we will do this in this tutorial
+  
+### Reminder: use of j in Datatable
+
+  + select columns:  DT[, .(colA, colB)]
+  + Aggregate/compute on columns: DT[, .(sA =sum(colA), mB = mean(colB))]
+
+### Reminder: SDcols
+
+  + SDcols was a was to work on multiple columns, or select multiple columns
+
+### Reminder: by
+
+  + by is used to aggregate by group: DT[, .(mean(colA)),by=colC]
+  + by is used to create new columns, values vary by groups: DT[, meanA:=mean(colA),by=colC]
+  
+## Contents of Tutorial 3
+
+Here, i review ordering a dataset. In data.table, we can do it two ways. First, we have `order()`. Second, we can use `setkey`, in the "by" section. Further, for this tutorial i explain the following, through (what is called) "reference":
+
+  + add columns
+  + update columns
+
+
+
+
+```{r message=FALSE, include=FALSE}
+require(tidyverse)
+require(data.table)
+
+dt1<-read_csv("flights14.csv")
+head(dt1)
+dt2<-fread("flights14.csv")
+head(dt2)
+```
+
+
+
+## Task 1: Ordering the dataset
+
+Another typical task is simply to arrange. In tidyverse:
+
+```{r}
+dt1 %>% arrange(dep_delay)
+```
+In data.table, we have `order`:
+
+```{r}
+dt2[order(dep_delay)]
+
+```
+
+Another way to do it, is to use "setkey". Using setkey will allow not just ordering, but will allow more efficient joins (which will be a topic for later) if the joins are based on these columns.
+
+```{r}
+setkey(dt2,carrier)
+dt2
+key(dt2)
+```
+
+
+
+## Task 2: Add Columns by reference
+
+Since this is something special to data.table, we will stop referring to tidy. First, i want to briefly describe what "reference" means; which is something only data.table does.
+
+Reference/reference semantics are about adding or changing info in the current copy of a dataset. Typical methods would create a "copy" of the entire dataframe, while also changing a certain aspect of it. An example would be `DT$X`, the `$` operator. Assigning data through this would create a copy. Doing it by reference would preclude such copying, making these operations faster.
+
+Now that we have explained, data.table uses `:=` for changes by reference. 
+
+To create a column, which are potentially functions of existing columns:
+
+```{r}
+dt2[,above_ave_depdelay:=dep_delay-mean(dep_delay)>0]
+```
+
+First, if you are to actually run the above interactively, nothing will come out in the console. It was returned invisibly. But something actually happened! It would be clear if we were to add `[]` at the end of the command:
+
+```{r}
+dt2[,above_ave_depdelay:=dep_delay-mean(dep_delay)>0][]
+
+```
+
+You can absolutely do multiple columns in one command. The format are the following: 
+
+
+```{r eval=FALSE}
+
+DT[, `:=`(colA = valA, # valA is assigned to colA
+          colB = valB, # valB is assigned to colB
+          ...
+)]
+
+## OR
+
+DT[, c("colA", "colB", ...) := list(valA, valB, ...)]
+
+```
+
+
+## Task 3: Update some rows by reference
+
+It is possible to add or update a column using conditions. The conditions come from the `i` part. In this example, suppose you wanted to replace all `FALSE` entries in the newly created column as NA. We will use `:=` as always:
+
+```{r}
+dt2[above_ave_depdelay==FALSE,above_ave_depdelay:=NA][]
+```
+
